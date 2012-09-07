@@ -1,11 +1,8 @@
-//#define USE_SIMULATION
-
 #include <EEPROM.h>
 #include "PID_v1_local.h"
 #include "EEPROMAnything.h"
-//#include "PID_AutoTune_v0_local.h"
 #include "io.h"
-#include <RTDModule.h>
+#include <RTDModule_local.h>
 #include <Wire.h>
 
 // Rot Enc
@@ -57,27 +54,6 @@ boolean helperflag=false;
 unsigned long curTime=0;
 
 
-
-#ifdef USE_SIMULATION
-double kpmodel = 5, taup = 50, theta[30];
-const double outputStart = 50;
-const double inputStart=250;
-
-void DoModel()
-{
-  // Cycle the dead time
-  for(byte i=0;i<30;i++)
-  {
-    theta[i] = theta[i+1];
-  }
-  // Compute the input
-  input = (kpmodel / taup) *(theta[0]-outputStart) + (input-inputStart)*(1-1/taup)+inputStart + ((float)random(-10,10))/100;
-}
-#else
-
-#endif /*USE_SIMULATION*/
-
-
 void setup()
 {
   Serial.begin(9600);
@@ -94,14 +70,9 @@ void setup()
   initializeEEPROM();
 
 
-
-#ifdef USE_SIMULATION
-  input = inputStart;
-  for(int i=0;i<30;i++)theta[i] = outputStart;
-#else
   InitializeInputCard();
   InitializeOutputCard();
-#endif
+  
   myPID.SetSampleTime(1000);
   myPID.SetOutputLimits(0, 100);
   myPID.SetTunings(kp, ki, kd);
@@ -129,60 +100,18 @@ void loop()
   if(doIO)
   { 
     ioTime+=250;
-#ifdef USE_SIMULATION
-    DoModel();
-    pidInput = input;
-#else
+    
     input =  ReadInputFromCard();
     if(!isnan(input))pidInput = input;
-
-#endif /*USE_SIMULATION*/
   }
-  
 
-  /*if(tuning)
-  {
-    byte val = (aTune.Runtime());
-
-    if(val != 0)
-    {
-      tuning = false;
-    }
-
-    if(!tuning)
-    { 
-      // We're done, set the tuning parameters
-      kp = aTune.GetKp();
-      ki = aTune.GetKi();
-      kd = aTune.GetKd();
-      myPID.SetTunings(kp, ki, kd);
-      AutoTuneHelper(false);
-      EEPROMBackupTunings();
-    }
-  }
-  else*/
-  //{
-    //if(runningProfile) ProfileRunTime();
-    //allow the pid to compute if necessary
-    myPID.Compute();
-  //}
-
-
-
-
+  //allow the pid to compute if necessary
+  myPID.Compute();
 
   if(doIO)
   {
-    //send the output
-#ifdef USE_SIMULATION
-    theta[29] = output;
-#else
     //send to output card
     WriteToOutputCard(output);
-#endif /*USE_SIMULATION*/  
-
-
-
   }
 
   if(now>lcdTime)
@@ -211,38 +140,6 @@ void loop()
     
     buttonTime += 50;
   }
-  
-  
-}
-
-void draw_old()
-{
-  u8g.setFont(u8g_font_fub11);
-  u8g.setPrintPos(0, 10);
-  u8g.print("S:");
-  u8g.print(setpoint);
-  
-  
-  u8g.setPrintPos(60, 20);
-  u8g.print("I:");
-  u8g.print(input);
-  
-  u8g.setPrintPos(0, 30);
-  u8g.print("O:");
-  u8g.print(output);
-  
-  
-  u8g.setPrintPos(60, 30);
-  u8g.print("p:");
-  u8g.print(kp);
-  
-  u8g.setPrintPos(0, 60);
-  u8g.print("i:");
-  u8g.print(ki);
-  
-  u8g.setPrintPos(60, 60);
-  u8g.print("d:");
-  u8g.print(kd);
   
   
 }
@@ -329,8 +226,8 @@ void draw(void) {
 
 const int eepromTuningOffset = 1; //13 bytes
 const int eepromDashOffset = 14; //9 bytes
-const int eepromATuneOffset = 23; //12 bytes
-const int eepromProfileOffset = 35; //136 bytes
+//const int eepromATuneOffset = 23; //12 bytes
+//const int eepromProfileOffset = 35; //136 bytes
 const int eepromInputOffset = 172; //? bytes (depends on the card)
 const int eepromOutputOffset = 300; //? bytes (depends on the card)
 void initializeEEPROM()
@@ -343,9 +240,9 @@ void initializeEEPROM()
     for(int i=1;i<1024;i++) EEPROM.write(i,0);
     EEPROMBackupTunings();
     EEPROMBackupDash();
-    EEPROMBackupATune();
+    //EEPROMBackupATune();
     EEPROMBackupInputParams(eepromInputOffset);
-    EEPROMBackupOutputParams(eepromOutputOffset);
+    //EEPROMBackupOutputParams(eepromOutputOffset);
     //EEPROMBackupProfile();
     EEPROM.write(0,EEPROM_ID); //so that first time will never be true again (future firmware updates notwithstanding)
   }
@@ -353,9 +250,9 @@ void initializeEEPROM()
   {
     EEPROMRestoreTunings();
     EEPROMRestoreDash();
-    EEPROMRestoreATune();
+    //EEPROMRestoreATune();
     EEPROMRestoreInputParams(eepromInputOffset);
-    EEPROMRestoreOutputParams(eepromOutputOffset);
+    //EEPROMRestoreOutputParams(eepromOutputOffset);
     //EEPROMRestoreProfile();    
   }
 }
@@ -393,7 +290,7 @@ void EEPROMRestoreDash()
   EEPROM_readAnything(eepromDashOffset+5,output);
 }
 
-void EEPROMBackupATune()
+/*void EEPROMBackupATune()
 {
   EEPROM_writeAnything(eepromATuneOffset,aTuneStep);
   EEPROM_writeAnything(eepromATuneOffset+4,aTuneNoise);
@@ -405,14 +302,14 @@ void EEPROMRestoreATune()
   EEPROM_readAnything(eepromATuneOffset,aTuneStep);
   EEPROM_readAnything(eepromATuneOffset+4,aTuneNoise);
   EEPROM_readAnything(eepromATuneOffset+8,aTuneLookBack);
-}
+}*/
 
 
 
 
-void changeAutoTune()
+/*void changeAutoTune()
 {
-/*  if(!tuning)
+  if(!tuning)
   {
     //initiate autotune
     AutoTuneHelper(true);
@@ -426,12 +323,12 @@ void changeAutoTune()
     aTune.Cancel();
     tuning = false;
     AutoTuneHelper(false);
-  }*/
+  }
 }
 
 void AutoTuneHelper(boolean start)
 {
-/*
+
   if(start)
   {
     ATuneModeRemember = myPID.GetMode();
@@ -441,9 +338,9 @@ void AutoTuneHelper(boolean start)
   {
     modeIndex = ATuneModeRemember;
     myPID.SetMode(modeIndex);
-  } */
+  } 
 }
-
+*/
 
 
 
@@ -587,7 +484,7 @@ void SerialReceive()
     }
     break;
   case 3: //ATune
-    if(index==14 && (b1<=1))
+/*    if(index==14 && (b1<=1))
     {
 
       aTuneStep = foo.asFloat[0];
@@ -599,7 +496,7 @@ void SerialReceive()
       }
       EEPROMBackupATune();
       ackTune = true;   
-    }
+    }*/
     break;
   case 4: //EEPROM reset
     if(index==2 && b1<2) EEPROM.write(0,0); //eeprom will re-write on next restart

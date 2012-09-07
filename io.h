@@ -40,7 +40,7 @@
 
 // ***** OUTPUT CARD *****
 //#define DIGITAL_OUTPUT_V120
-#define DIGITAL_OUTPUT_V150
+#define SSR_OUTPUT
 //#define PROTOTYPE_OUTPUT
 
 union {                // This Data structure lets
@@ -54,7 +54,7 @@ byte b1,b2;
 #ifdef PROTOTYPE_INPUT
  /*Include any libraries and/or global variables here*/
 
-#include <RTDModule.h>
+#include "RTDModule_local.h"
 RTDModule rtd;
 
 float flt1_i=0, flt2_i=0, flt3_i=0, flt4_i=0;
@@ -86,8 +86,7 @@ void EEPROMRestoreInputParams(int offset)
 
 void InitializeInputCard()
 {
-  rtd.setPins(55,56,0);
-  rtd.calibration(0, 0.148741418, -7.288329519);
+  rtd.calibration(0.148741418, -7.288329519);
   analogReference(INTERNAL);
 }
 
@@ -140,14 +139,12 @@ void InputSerialID()
 
 double ReadInputFromCard()
 {
-  return rtd.getTemperature(0);
+  return rtd.getTemperature();
 }
 #endif /*PROTOTYPE_INPUT*/
 
 
-#if defined(DIGITAL_OUTPUT_V120) || defined(DIGITAL_OUTPUT_V150)
-byte outputType = 1;
-const byte RelayPin = 66;
+#ifdef SSR_OUTPUT
 const byte SSRPin = A1;
 //unsigned long windowStartTime;
 double outWindowSec = 5.0;
@@ -164,20 +161,8 @@ void setOutputWindow(double val)
   } 
 }
 
-void EEPROMBackupOutputParams(int offset)
-{
-  /*EEPROM.write(offset, outputType);
-  EEPROM_writeAnything(offset+1, WindowSize);*/
-}
-void EEPROMRestoreOutputParams(int offset)
-{
-  /*outputType = EEPROM.read(offset);
-  EEPROM_readAnything(offset+1, WindowSize);*/
-}
-
 void InitializeOutputCard()
 {
-  //pinMode(RelayPin, OUTPUT);
   pinMode(SSRPin, OUTPUT);
 }
 
@@ -193,15 +178,9 @@ void OutputSerialReceiveDuring(byte val, byte index)
 
 void OutputSerialReceiveAfter(int eepromOffset)
 {
-  if(outputType != b1)
-  {
-    if (b1==0)digitalWrite(SSRPin, LOW);
-    else if(b1==1) digitalWrite( RelayPin,LOW); //turn off the other pin
-    outputType=b1; 
-  }
+  digitalWrite(SSRPin, LOW);
   outWindowSec =  serialXfer.asFloat[0];
   setOutputWindow(outWindowSec);
-  EEPROMBackupOutputParams(eepromOffset);
 }
 
 void OutputSerialID()
@@ -211,22 +190,16 @@ void OutputSerialID()
 
 void WriteToOutputCard(double value)
 {
-  unsigned long wind = millis() % WindowSize; // (millis() - windowStartTime);
-  /*if(wind>WindowSize)
-   { 
-   wind -= WindowSize;
-   windowStartTime += WindowSize;
-   }*/
+  unsigned long wind = millis() % WindowSize;
   unsigned long oVal = (unsigned long)(value*(double)WindowSize/ 100.0);
-  if(outputType == 0) digitalWrite(RelayPin ,(oVal>wind) ? HIGH : LOW);
-  else if(outputType == 1) digitalWrite(SSRPin ,(oVal>wind) ? HIGH : LOW);
+  digitalWrite(SSRPin ,(oVal>wind) ? HIGH : LOW);
 }
 
 // Serial send & receive
 void OutputSerialSend()
 {
-  Serial.print((int)outputType); 
+  Serial.print((int)1); 
   Serial.print(" ");  
   Serial.println(outWindowSec); 
 }
-#endif /*DIGITAL_OUTPUT_V120 & DIGITAL_OUTPUT_V150*/
+#endif /*SSR_OUTPUT*/
